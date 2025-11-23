@@ -282,6 +282,8 @@ class EnvRobosuite(EB.EnvBase):
                 cam_width = self.env.camera_widths[cam_idx]
                 ext_mat = get_camera_extrinsic_matrix(self.env.sim, camera_name)
                 int_mat = get_camera_intrinsic_matrix(self.env.sim, camera_name, cam_height, cam_width)
+                ret[f'{camera_name}_extrinsic'] = ext_mat
+                ret[f'{camera_name}_intrinsic'] = int_mat
                 depth = di[f'{camera_name}_depth'][::-1]
                 depth = np.clip(depth, 0, 1)
                 depth = get_real_depth_map(self.env.sim, depth)
