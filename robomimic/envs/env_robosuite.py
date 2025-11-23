@@ -7,7 +7,8 @@ import json
 import numpy as np
 from copy import deepcopy
 import open3d as o3d
-
+from robosuite.utils import transform_utils as T
+from scipy.spatial.transform import Rotation as R
 import robosuite
 from robosuite.utils.camera_utils import get_real_depth_map, get_camera_extrinsic_matrix, get_camera_intrinsic_matrix
 try:
@@ -153,6 +154,14 @@ class EnvRobosuite(EB.EnvBase):
             [pc_center[2], pc_center[2] + self.ws_size]
         ])
 
+        robot = self.env.robots[0]               # SingleArm
+        root_body = robot.robot_model.root_body  # name of robot root body
+        base_pos_world = self.env.sim.data.get_body_xpos(root_body).copy()           # (3,)
+        base_mat_world = self.env.sim.data.get_body_xmat(root_body).reshape(3, 3)    # (3,3)
+        T_world_base = T.make_pose(base_pos_world, base_mat_world)  # R|t in world
+        T_base_world = T.pose_inv(T_world_base)                     # invert pose
+        self.base_world_T_base_robot = T_base_world
+
     def step(self, action):
         """
         Step in the environment with an action.
@@ -282,7 +291,7 @@ class EnvRobosuite(EB.EnvBase):
                 cam_width = self.env.camera_widths[cam_idx]
                 ext_mat = get_camera_extrinsic_matrix(self.env.sim, camera_name)
                 int_mat = get_camera_intrinsic_matrix(self.env.sim, camera_name, cam_height, cam_width)
-                ret[f'{camera_name}_extrinsic'] = ext_mat
+                ret[f'{camera_name}_extrinsic'] = self.base_world_T_base_robot @ ext_mat
                 ret[f'{camera_name}_intrinsic'] = int_mat
                 depth = di[f'{camera_name}_depth'][::-1]
                 depth = np.clip(depth, 0, 1)
