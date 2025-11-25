@@ -19,6 +19,7 @@ except ImportError:
 
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.envs.env_base as EB
+import torch
 
 # protect against missing mujoco-py module, since robosuite might be using mujoco-py or DM backend
 try:
@@ -55,6 +56,32 @@ def np2o3d(pcd, color=None):
         assert color.min() >= 0
         pcd_o3d.colors = o3d.utility.Vector3dVector(color)
     return pcd_o3d
+
+def get_plucker_raymap(K, c2w, height, width, return_numpy=False, channel_first=False):
+    """intrinsics (3,3), cam2world (4,4), height int, width int"""
+    if not torch.is_tensor(K):
+        K = torch.tensor(K)
+    if not torch.is_tensor(c2w):
+        c2w = torch.tensor(c2w)
+    vv, uu = torch.meshgrid(
+        torch.arange(height, device=K.device, dtype=K.dtype) + 0.5,
+        torch.arange(width, device=K.device, dtype=K.dtype) + 0.5,
+        indexing="ij",
+    )
+    rays = torch.stack([uu, vv, torch.ones_like(uu)], dim=-1)
+    d_world = torch.nn.functional.normalize(
+        (rays @ torch.linalg.inv(K).T) @ c2w[:3, :3].T,
+        dim=-1,
+        eps=1e-9,
+    )
+    o = c2w[:3, 3].view(1, 1, 3)
+    m = torch.cross(o, d_world, dim=-1)
+    raymaps = torch.cat([d_world, m], dim=-1)
+    if channel_first:
+        raymaps = raymaps.permute(2, 0, 1).contiguous() 
+    if return_numpy:
+        raymaps = raymaps.cpu().numpy()
+    return raymaps
 
 class EnvRobosuite(EB.EnvBase):
     """Wrapper class for robosuite environments (https://github.com/ARISE-Initiative/robosuite)"""
@@ -293,6 +320,9 @@ class EnvRobosuite(EB.EnvBase):
                 int_mat = get_camera_intrinsic_matrix(self.env.sim, camera_name, cam_height, cam_width)
                 ret[f'{camera_name}_extrinsic'] = self.base_world_T_base_robot @ ext_mat
                 ret[f'{camera_name}_intrinsic'] = int_mat
+                ret[f'{camera_name}_plucker'] = get_plucker_raymap(int_mat, ext_mat, \
+                                                                   cam_height, cam_width, \
+                                                                    return_numpy= not torch.is_tensor(ext_mat))
                 depth = di[f'{camera_name}_depth'][::-1]
                 depth = np.clip(depth, 0, 1)
                 depth = get_real_depth_map(self.env.sim, depth)

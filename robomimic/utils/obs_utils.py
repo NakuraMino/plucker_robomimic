@@ -962,3 +962,12 @@ class LowDimModality(Modality):
     @classmethod
     def _default_obs_unprocessor(cls, obs):
         return obs
+
+class PluckerModality(Modality):
+    name = "plucker"
+    @classmethod
+    def _default_obs_processor(cls, obs):
+        return TU.to_float(obs)  # leaves CHW and values unchanged
+    @classmethod
+    def _default_obs_unprocessor(cls, obs):
+        return obs
