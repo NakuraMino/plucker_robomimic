@@ -77,10 +77,12 @@ def get_plucker_raymap(K, c2w, height, width, return_numpy=False, channel_first=
     o = c2w[:3, 3].view(1, 1, 3)
     m = torch.cross(o, d_world, dim=-1)
     raymaps = torch.cat([d_world, m], dim=-1)
+    raymaps = raymaps.to(torch.float32)
     if channel_first:
         raymaps = raymaps.permute(2, 0, 1).contiguous() 
     if return_numpy:
         raymaps = raymaps.cpu().numpy()
+        raymaps = raymaps.astype(np.float32)
     return raymaps
 
 class EnvRobosuite(EB.EnvBase):
@@ -316,13 +318,13 @@ class EnvRobosuite(EB.EnvBase):
             for cam_idx, camera_name in enumerate(self.env.camera_names):
                 cam_height = self.env.camera_heights[cam_idx]
                 cam_width = self.env.camera_widths[cam_idx]
-                ext_mat = get_camera_extrinsic_matrix(self.env.sim, camera_name)
-                int_mat = get_camera_intrinsic_matrix(self.env.sim, camera_name, cam_height, cam_width)
-                ret[f'{camera_name}_extrinsic'] = self.base_world_T_base_robot @ ext_mat
+                ext_mat = get_camera_extrinsic_matrix(self.env.sim, camera_name).astype(np.float32)
+                int_mat = get_camera_intrinsic_matrix(self.env.sim, camera_name, cam_height, cam_width).astype(np.float32)
+                ret[f'{camera_name}_extrinsic'] = (self.base_world_T_base_robot @ ext_mat).astype(np.float32)
                 ret[f'{camera_name}_intrinsic'] = int_mat
-                ret[f'{camera_name}_plucker'] = get_plucker_raymap(int_mat, ext_mat, \
-                                                                   cam_height, cam_width, \
-                                                                    return_numpy= not torch.is_tensor(ext_mat))
+                # ret[f'{camera_name}_plucker'] = get_plucker_raymap(int_mat, ret[f'{camera_name}_extrinsic'], \
+                #                                                    cam_height, cam_width, \
+                #                                                     return_numpy= not torch.is_tensor(ext_mat))
                 depth = di[f'{camera_name}_depth'][::-1]
                 depth = np.clip(depth, 0, 1)
                 depth = get_real_depth_map(self.env.sim, depth)
@@ -390,7 +392,7 @@ class EnvRobosuite(EB.EnvBase):
             # plt.savefig('test2.png')
             # plt.close()
 
-            ret['voxels'] = np_voxels
+            # ret['voxels'] = np_voxels
 
             bounding_box = o3d.geometry.AxisAlignedBoundingBox(self.pc_workspace.T[0], self.pc_workspace.T[1])
             cropped_pcd = all_pcds.crop(bounding_box)
@@ -430,7 +432,7 @@ class EnvRobosuite(EB.EnvBase):
             # plt.savefig('1.png')
             # plt.close()
 
-            ret['point_cloud'] = np.concatenate([xyz, color], 1)
+            # ret['point_cloud'] = np.concatenate([xyz, color], 1)
 
         if self._is_v1:
             for robot in self.env.robots:
